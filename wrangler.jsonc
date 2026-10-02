@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "celina-chat",
+  "account_id": "123527d9c3c3ad3e1fa18b2aff52dd01",
+  "compatibility_date": "2025-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@tanstack/react-start/server-entry",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "chat.usecelina.xyz",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "OPENROUTER_APP_NAME": "Celina Chat",
+    "OPENAI_MODEL": "openai/gpt-4o-mini",
+    "VITE_WALLETCONNECT_PROJECT_ID": "89923e7fa1ba8502b78ae80060632f88"
+  }
+}

@@ -1,0 +1,193 @@
+import { dynamicTool, type FlexibleSchema, type ToolSet } from "ai";
+import type { createCelinaClient } from "@andrewkimjoseph/celina-sdk";
+import { isGoodDollarUsdReservePair } from "@andrewkimjoseph/celina-sdk";
+import {
+  ALL_TOOL_DEFINITIONS,
+  filterToolDefinitions,
+  type ToolRuntime,
+} from "@andrewkimjoseph/celina-sdk/tools";
+import { checkSendPreflight } from "@/lib/tx/send-preflight";
+import { checkBlockedSendRecipient } from "@/lib/tx/blocked-send-recipients";
+import {
+  parseTransactionHash,
+  TRUNCATED_TX_HASH_MESSAGE,
+} from "@/lib/tx/transaction-hash";
+import { isPreparedFlow } from "@/lib/tx/prepared-flow";
+import { z } from "zod";
+
+type CelinaClient = ReturnType<typeof createCelinaClient>;
+
+/** True when a reserve quote/prepare should run as composite swap instead. */
+export function shouldDelegateReserveToComposite(
+  tokenIn: string | undefined,
+  tokenOut: string | undefined,
+): boolean {
+  const a = tokenIn?.trim() ?? "";
+  const b = tokenOut?.trim() ?? "";
+  if (!a || !b) {
+    return false;
+  }
+  return !isGoodDollarUsdReservePair(a, b);
+}
+
+export function resolveTargetAddress(
+  connectedAddress: `0x${string}`,
+  address?: string,
+): `0x${string}` {
+  return (address ?? connectedAddress) as `0x${string}`;
+}
+
+function createChatRuntime(
+  celina: CelinaClient,
+  connectedAddress: `0x${string}`,
+): ToolRuntime {
+  return {
+    celina,
+    resolveWallet: (input) =>
+      resolveTargetAddress(
+        connectedAddress,
+        input?.address ?? input?.wallet_address ?? input?.from,
+      ),
+    hooks: {
+      beforePrepareSend: async ({ sender, token, amount }) => {
+        const preflight = await checkSendPreflight(celina, sender, token, amount);
+        if (!preflight.ok) {
+          throw new Error(
+            preflight.message ??
+              `Insufficient ${token} balance to send ${amount}.`,
+          );
+        }
+      },
+    },
+  };
+}
+
+export function createChatToolsFromSdk(
+  celina: CelinaClient,
+  connectedAddress: `0x${string}`,
+) {
+  const runtime = createChatRuntime(celina, connectedAddress);
+  const definitions = filterToolDefinitions(ALL_TOOL_DEFINITIONS, {
+    surface: "browser",
+  });
+  const definitionByName = new Map(definitions.map((def) => [def.name, def]));
+  const swapQuote = definitionByName.get("get_swap_quote");
+  const prepareSwap = definitionByName.get("prepare_swap");
+
+  const tools: ToolSet = {};
+  for (const def of definitions) {
+    if (def.name === "prepare_send") {
+      tools[def.name] = dynamicTool({
+        description: def.description,
+        inputSchema: def.inputSchema as unknown as FlexibleSchema<
+          Record<string, unknown>
+        >,
+        execute: async (input) => {
+          const params = input as {
+            to?: string;
+            token?: string;
+            amount?: string;
+            from?: string;
+          };
+          const originalTo = String(params.to ?? "");
+          const { address: recipient } = await celina.ens.resolveAddressOrEns(originalTo);
+          const blocked = checkBlockedSendRecipient(recipient);
+          if (!blocked.ok) {
+            throw new Error(blocked.message);
+          }
+          const result = await def.handler(runtime, input as Record<string, unknown>);
+
+          // If the user specified an ENS name, replace the resolved hex address
+          // in the flow summary and step descriptions so the LLM echoes the ENS
+          // name rather than the raw hex — keeping the AI message and confirm
+          // card consistent.
+          const isEns = /\.eth$/i.test(originalTo.trim());
+          if (isEns && isPreparedFlow(result)) {
+            const hexPattern = new RegExp(
+              recipient.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+              "gi",
+            );
+            result.summary = result.summary.replace(hexPattern, originalTo);
+            result.steps = result.steps.map((step) => ({
+              ...step,
+              description: step.description.replace(hexPattern, originalTo),
+            }));
+          }
+
+          return result;
+        },
+      });
+      continue;
+    }
+
+    if (def.name === "get_transaction") {
+      tools[def.name] = dynamicTool({
+        description: def.description,
+        inputSchema: z.object({
+          hash: z
+            .string()
+            .describe("Full Celo transaction hash — 0x followed by 64 hex characters"),
+        }),
+        execute: async (input) => {
+          const params = input as { hash?: string };
+          const hash = parseTransactionHash(String(params.hash ?? ""));
+          if (!hash) {
+            throw new Error(TRUNCATED_TX_HASH_MESSAGE);
+          }
+          return def.handler(runtime, { hash });
+        },
+      });
+      continue;
+    }
+
+    if (def.name === "get_gooddollar_reserve_quote") {
+      tools[def.name] = dynamicTool({
+        description: def.description,
+        inputSchema: def.inputSchema as unknown as FlexibleSchema<
+          Record<string, unknown>
+        >,
+        execute: async (input) => {
+          const params = input as { token_in?: string; token_out?: string };
+          if (
+            swapQuote &&
+            shouldDelegateReserveToComposite(params.token_in, params.token_out)
+          ) {
+            return swapQuote.handler(runtime, input as Record<string, unknown>);
+          }
+          return def.handler(runtime, input as Record<string, unknown>);
+        },
+      });
+      continue;
+    }
+
+    if (def.name === "prepare_gooddollar_reserve_swap") {
+      tools[def.name] = dynamicTool({
+        description: def.description,
+        inputSchema: def.inputSchema as unknown as FlexibleSchema<
+          Record<string, unknown>
+        >,
+        execute: async (input) => {
+          const params = input as { token_in?: string; token_out?: string };
+          if (
+            prepareSwap &&
+            shouldDelegateReserveToComposite(params.token_in, params.token_out)
+          ) {
+            return prepareSwap.handler(runtime, input as Record<string, unknown>);
+          }
+          return def.handler(runtime, input as Record<string, unknown>);
+        },
+      });
+      continue;
+    }
+
+    tools[def.name] = dynamicTool({
+      description: def.description,
+      inputSchema: def.inputSchema as unknown as FlexibleSchema<
+        Record<string, unknown>
+      >,
+      execute: async (input) =>
+        def.handler(runtime, input as Record<string, unknown>),
+    });
+  }
+  return tools;
+}
