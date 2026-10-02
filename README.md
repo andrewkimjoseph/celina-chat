@@ -10,7 +10,7 @@ Wallet chat for the full Celina SDK on Celo mainnet. Every browser-surface tool 
 
 Deployed as a **Cloudflare Worker** (TanStack Start). It is not an npm package. It depends on an exact `@andrewkimjoseph/celina-sdk` version.
 
-`execute_*` tools, Self Agent ID, and AgentKarma stay MCP-only. Those need a server-held key and are not exposed here.
+`execute_*` tools, AgentKarma, and Self Agent ID lifecycle (registration, proof refresh, session polling, request signing, and authenticated fetches) stay MCP-only. Those need a server-held key or an in-memory session. Self verification reads (`verify_self_agent`, `get_self_identity`, `lookup_self_agent`, `verify_self_request`) are available in chat.
 
 ## Local dev
 
