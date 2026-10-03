@@ -122,7 +122,11 @@ export function getActivePreparedFlowWithMeta(
   return meta;
 }
 
-/** True after the user signed the wallet confirm card for this prepared flow. */
+/**
+ * True after the user signed the wallet confirm card for this prepared flow.
+ * A confirmation applies only to the latest prepared flow before it — the card
+ * the user could sign — not to earlier prepares in the same turn.
+ */
 export function isPreparedFlowConfirmed(
   messages: UIMessage[],
   meta: PreparedFlowMeta,
@@ -140,13 +144,51 @@ export function isPreparedFlowConfirmed(
 
     const text = getMessageText(message);
     if (text.startsWith(CONFIRMED_TX_PREFIX)) {
-      return true;
+      return flowConfirmedAt(messages, i)?.flowKey === meta.flowKey;
     }
     if (!isAutoPreparedFlowUserMessage(text)) {
       return false;
     }
   }
 
+  return false;
+}
+
+/** Latest prepared flow the confirmation at `confirmIndex` belongs to. */
+function flowConfirmedAt(
+  messages: UIMessage[],
+  confirmIndex: number,
+): PreparedFlowMeta | undefined {
+  let owner: PreparedFlowMeta | undefined;
+
+  for (const candidate of extractPreparedFlowMetas(messages)) {
+    const index = messages.findIndex((message) => message.id === candidate.messageId);
+    if (index === -1 || index >= confirmIndex) {
+      continue;
+    }
+    if (hasRealUserMessageBetween(messages, index, confirmIndex)) {
+      continue;
+    }
+    owner = candidate;
+  }
+
+  return owner;
+}
+
+function hasRealUserMessageBetween(
+  messages: UIMessage[],
+  fromIndex: number,
+  toIndex: number,
+): boolean {
+  for (let i = fromIndex + 1; i < toIndex; i++) {
+    const message = messages[i];
+    if (message.role !== "user") {
+      continue;
+    }
+    if (!isAutoPreparedFlowUserMessage(getMessageText(message))) {
+      return true;
+    }
+  }
   return false;
 }
 
