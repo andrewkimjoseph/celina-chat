@@ -15,7 +15,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
     "@ai-sdk/react": "^3.0.193",
-    "@andrewkimjoseph/celina-sdk": "0.27.4",
+    "@andrewkimjoseph/celina-sdk": "0.27.5",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "0.10.13",
