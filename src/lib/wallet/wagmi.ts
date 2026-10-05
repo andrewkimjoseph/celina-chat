@@ -12,9 +12,7 @@ import { http } from "wagmi";
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Celina Chat",
-  projectId:
-    import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ??
-    "00000000000000000000000000000000",
+  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID,
   chains: [celo],
   transports: {
     [celo.id]: http(

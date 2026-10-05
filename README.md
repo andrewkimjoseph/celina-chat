@@ -17,7 +17,7 @@ Deployed as a **Cloudflare Worker** (TanStack Start). It is not an npm package. 
 ```bash
 npm install
 cp .env.example .env.local
-# set OPENROUTER_API_KEY, RPC URLs, and VITE_WALLETCONNECT_PROJECT_ID
+# set OPENROUTER_API_KEY and RPC URLs
 npm run dev
 ```
 
@@ -30,7 +30,7 @@ Requires Node.js ≥ 20. Vite serves the app on port 3000.
 | `OPENROUTER_APP_NAME` | Server. Defaults to `Celina Chat`. |
 | `CELO_RPC_URL_MAINNET` | Server. SDK reads and transaction simulation. |
 | `ETH_RPC_URL_MAINNET` | Server. ENS resolution. |
-| `VITE_WALLETCONNECT_PROJECT_ID` | Client. RainbowKit / WalletConnect. Public. |
+| `VITE_WALLETCONNECT_PROJECT_ID` | Client. RainbowKit / WalletConnect. Public. Inlined at build from `wrangler.jsonc`. |
 
 ## Deploy
 
@@ -49,7 +49,7 @@ npx wrangler secret put CELO_RPC_URL_MAINNET
 npx wrangler secret put ETH_RPC_URL_MAINNET
 ```
 
-`VITE_WALLETCONNECT_PROJECT_ID`, `OPENAI_MODEL`, and `OPENROUTER_APP_NAME` are public and live in `wrangler.jsonc` `vars`.
+`OPENAI_MODEL` and `OPENROUTER_APP_NAME` are public Worker vars in `wrangler.jsonc`. `VITE_WALLETCONNECT_PROJECT_ID` is listed there too, and Vite inlines it into the client bundle at build time. The Worker runtime binding does not configure the browser by itself. An already-set `VITE_WALLETCONNECT_PROJECT_ID` in the build environment overrides the `wrangler.jsonc` value.
 
 ## License
 
