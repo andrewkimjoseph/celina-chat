@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useChats } from "@/hooks/use-chats";
 import { useTransactions } from "@/hooks/use-transactions";
+import { useLayoutEffect, useRef } from "react";
 import { useAccount } from "wagmi";
 
 const headerChipClassName =
@@ -99,9 +100,32 @@ function NewChatButton() {
 
 export function SiteHeader() {
   const { isConnected } = useAccount();
+  const headerRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) {
+      return;
+    }
+
+    const apply = () => {
+      document.documentElement.style.setProperty(
+        "--app-header-height",
+        `${header.getBoundingClientRect().height}px`,
+      );
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <header className="z-50 w-full shrink-0 border-b-2 border-[var(--ink)] bg-[var(--surface)]">
+    <header
+      ref={headerRef}
+      className="z-50 w-full shrink-0 border-b-2 border-[var(--ink)] bg-[var(--surface)]"
+    >
       <div className="relative flex w-full items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
         <Link to="/" className="flex shrink-0 items-center gap-2">
           <img
